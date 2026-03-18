@@ -239,39 +239,64 @@ Based on NRI spending patterns and comparable services:
 
 ## 6. Technical Architecture
 
-### Stack
+### Stack (REVISED — PWA-first, single Next.js app)
 ```
-Frontend (NRI Dashboard):  Next.js 14 (App Router) + Tailwind CSS + shadcn/ui
-Mobile (Parent App):       React Native (Expo) + NativeWind
-Backend:                   Node.js + Express (or Fastify)
-Database:                  Supabase (PostgreSQL + Realtime + Auth + Storage)
-AI:                        Claude API (claude-sonnet-4-6 or claude-haiku-4-5)
-Voice/TTS:                 ElevenLabs or AWS Polly
-Notifications:             Firebase Cloud Messaging (FCM) + Resend (email)
-BLE Integration:           react-native-ble-plx
-Health APIs:               Apple HealthKit + Google Health Connect
-Scheduling:                Supabase Edge Functions + pg_cron
-File Storage:              Supabase Storage (reports, voice notes)
-Deployment:                Vercel (Next.js) + Railway/Render (Node backend) + Supabase cloud
+Web App (PWA):    Next.js 14 (App Router) + Tailwind CSS + shadcn/ui
+                  — serves both Elder (mobile) and NRI (desktop/web) from one codebase
+                  — PWA manifest for "Add to Home Screen" on mobile
+Backend:          Next.js API routes (no separate server needed)
+Database:         Supabase (PostgreSQL + Realtime + Auth + Storage)
+AI:               Claude API (claude-sonnet-4-6)
+                  — Vision: OCR health device photos
+                  — Text: daily summaries, chat companion
+Notifications:    Twilio (SMS) + Resend (email)
+WhatsApp (Phase2):Puppeteer automation of web.whatsapp.com
+Payments:         Razorpay (INR, UPI, cards)
+File Storage:     Supabase Storage (device photos, PDF reports)
+Deployment:       Vercel
 ```
 
-### Monorepo Structure
+### App Structure
 ```
 sathi/
-├── apps/
-│   ├── web/              # Next.js NRI dashboard
-│   ├── mobile/           # React Native parent app (Expo)
-│   └── api/              # Node.js backend
-├── packages/
-│   ├── shared/           # Shared types, utils, constants
-│   ├── ui/               # Shared UI components
-│   └── ai/               # Claude integration, prompts
+├── app/
+│   ├── (elder)/              # Elder parent UI — large text, simple, mobile-first
+│   │   ├── layout.tsx        # Elder layout (large fonts, high contrast)
+│   │   ├── home/page.tsx     # Daily check-in home
+│   │   └── checkin/page.tsx  # Photo capture + health reading entry
+│   ├── (nri)/                # NRI child UI — dashboard, charts, alerts
+│   │   ├── layout.tsx
+│   │   ├── dashboard/page.tsx
+│   │   ├── parent/[id]/page.tsx
+│   │   └── settings/page.tsx
+│   ├── auth/
+│   │   ├── login/page.tsx    # Unified login (detects elder vs NRI by role)
+│   │   └── callback/page.tsx
+│   ├── api/
+│   │   ├── ai/ocr/route.ts           # Claude Vision → extract reading from photo
+│   │   ├── ai/summary/route.ts       # Generate daily health summary
+│   │   ├── health/readings/route.ts  # CRUD health data
+│   │   ├── notifications/send/route.ts # SMS + email
+│   │   ├── payments/create-order/route.ts
+│   │   └── payments/webhook/route.ts
+│   ├── layout.tsx
+│   └── page.tsx              # Root redirect (→ /auth/login)
+├── components/
+│   ├── elder/                # Elder-specific: large cards, SOS, camera
+│   └── nri/                  # NRI: charts, alerts, parent cards
+├── lib/
+│   ├── supabase/             # Client + server Supabase
+│   ├── claude/               # Claude client + prompts
+│   ├── twilio/               # SMS sending
+│   ├── resend/               # Email sending
+│   └── razorpay/             # Payment orders
 ├── supabase/
-│   ├── migrations/       # DB migrations
-│   └── functions/        # Edge functions (scheduled jobs)
-├── docs/                 # Documentation
-├── SATHI_PROJECT_PLAN.md # This file
-└── package.json          # Root workspace config
+│   └── migrations/
+│       └── 001_initial.sql   # Full schema
+├── public/
+│   └── manifest.json         # PWA manifest
+├── SATHI_PROJECT_PLAN.md
+└── package.json
 ```
 
 ### Database Schema (High-Level)
@@ -476,23 +501,101 @@ GET    /reports/weekly           -- Generate weekly PDF report
 ### Current Status
 ```
 Date: 2026-03-18
-Phase: 0 (Foundation — NOT STARTED)
+Phase: 1 (MVP — BUILT, pending deployment)
 Branch: claude/setup-project-plan-ZBqsO
 What's done:
-  - [x] Project plan created (this file)
-  - [ ] Monorepo not yet initialized
-  - [ ] Supabase project not created
-  - [ ] No code written yet
+  - [x] Project plan created + updated with revised decisions
+  - [x] Next.js 14 PWA scaffolded (package.json, tailwind, tsconfig, postcss, PWA manifest)
+  - [x] Supabase schema + migrations (profiles, families, health_readings, medications,
+        daily_summaries, alerts, subscriptions + RLS policies + triggers)
+  - [x] Auth flow — phone OTP (elderly parent) + email/password (NRI child)
+  - [x] Auth onboarding — name, DOB, health conditions, invite token linking
+  - [x] Middleware — route protection, role-based redirects
+  - [x] Elder UI — home screen with daily progress, metric check-in cards, SOS button
+  - [x] Elder check-in — photo capture → Claude Vision OCR → confirm/manual fallback
+  - [x] NRI Dashboard — parent cards, health score, AI summary, readings grid, charts
+  - [x] NRI Settings — profile, subscription status
+  - [x] Invite parent flow — SMS via Twilio with deep link
+  - [x] Alerts — real-time abnormal reading + SOS alerts to NRI
+  - [x] Claude AI — Vision OCR, daily summary generation, companion chat
+  - [x] Razorpay — order creation, payment webhook, 3 plans (Base/Standard/Premium)
+  - [x] SMS (Twilio) + Email (Resend) daily summary delivery
+  - [ ] Supabase project not yet created (needs env vars)
+  - [ ] Vercel deployment not yet done
+  - [ ] Health photo storage bucket not yet created in Supabase
+```
+
+### File Tree (what was built)
+```
+sathi/
+├── app/
+│   ├── (elder)/
+│   │   ├── layout.tsx
+│   │   ├── home/page.tsx + ElderHomeClient.tsx
+│   │   └── checkin/page.tsx
+│   ├── (nri)/
+│   │   ├── layout.tsx
+│   │   ├── dashboard/page.tsx + NRIDashboardClient.tsx
+│   │   └── settings/page.tsx + SettingsClient.tsx
+│   ├── auth/
+│   │   ├── login/page.tsx
+│   │   ├── onboarding/page.tsx
+│   │   └── callback/route.ts
+│   ├── api/
+│   │   ├── ai/ocr/route.ts
+│   │   ├── ai/summary/route.ts
+│   │   ├── health/readings/route.ts
+│   │   ├── notifications/send/route.ts
+│   │   ├── payments/create-order/route.ts
+│   │   ├── payments/webhook/route.ts
+│   │   ├── families/route.ts
+│   │   └── auth/complete-profile/route.ts
+│   ├── layout.tsx, globals.css, page.tsx
+├── components/
+│   ├── elder/ CheckInCard.tsx, SOSButton.tsx
+│   └── nri/   NRINav.tsx, ParentHealthCard.tsx, HealthChart.tsx,
+│               AlertsBanner.tsx, SubscriptionBanner.tsx, InviteParentModal.tsx
+├── lib/
+│   ├── supabase/client.ts, server.ts
+│   ├── claude/index.ts     (OCR + summary + companion chat)
+│   ├── twilio/index.ts
+│   ├── resend/index.ts     (HTML email template)
+│   ├── razorpay/index.ts   (orders + webhook verification + plan config)
+│   └── utils.ts            (cn, health ranges, metric icons)
+├── supabase/migrations/001_initial.sql
+├── middleware.ts
+├── public/manifest.json
+└── .env.example
+```
+
+### Next Steps to Go Live
+1. **Create Supabase project** at supabase.com, run `001_initial.sql`, create `health-photos` storage bucket (public)
+2. **Set up .env** — Supabase URL/keys, Anthropic key, Twilio SID/token/phone, Resend key, Razorpay keys
+3. **Deploy to Vercel** — `vercel deploy`, add env vars in Vercel dashboard
+4. **Enable Supabase phone auth** — enable Twilio provider in Supabase Auth settings
+5. **Register Razorpay webhook** — point to `https://your-app.vercel.app/api/payments/webhook`
+6. **Test end-to-end** with 1 pilot family
+7. **Add daily summary cron** — Supabase pg_cron or Vercel cron to hit `/api/ai/summary` at 8pm IST daily
+
+### Revised Elder Health Photo OCR Flow
+```
+Elder taps "Check BP" → camera opens → takes photo of BP monitor display
+→ photo uploaded to Supabase Storage
+→ /api/ai/ocr called with image URL
+→ Claude Vision extracts: { metric: "blood_pressure", systolic: 120, diastolic: 80 }
+→ Elder sees: "We read: 120/80 — Is this correct?" [Yes] [Enter Manually]
+→ Confirmed → saved to health_readings
+→ Daily summary regenerated
 ```
 
 ### Immediate Next Steps (Do These Next)
-1. **Initialize monorepo** — Set up Turborepo with apps/web, apps/mobile, apps/api, packages/shared
-2. **Scaffold Next.js web app** — Basic app structure with Tailwind + shadcn/ui
-3. **Scaffold React Native mobile app** — Expo with NativeWind
-4. **Scaffold Node.js API** — Express + TypeScript
-5. **Set up Supabase schema** — Core tables (users, profiles, families, health_readings)
-6. **Build auth flow** — NRI signup → invite parent → parent OTP login
-7. **Deploy baseline** — Vercel (web) + Railway (API) + Supabase cloud
+1. **Scaffold Next.js 14 PWA** — package.json, next.config, tailwind, PWA manifest
+2. **Supabase schema** — profiles, families, health_readings, medications, daily_summaries, subscriptions
+3. **Auth flow** — phone OTP (elder) + email (NRI) + role-based redirect
+4. **Elder UI** — home screen, photo check-in, SOS
+5. **NRI Dashboard** — parent cards, health charts, AI summary, alerts
+6. **API routes** — OCR, readings, summary generation, SMS/email, Razorpay
+7. **Deploy to Vercel**
 
 ### Key Decisions Made
 | Decision | Choice | Rationale |
@@ -505,13 +608,18 @@ What's done:
 | TTS | ElevenLabs (primary) / AWS Polly (fallback) | Natural voice quality |
 | Deployment | Vercel + Railway + Supabase | Simple, scalable, low ops overhead |
 
-### Key Decisions Pending
-- [ ] Which BLE devices to officially support in MVP (just BP + oximeter?)
-- [ ] WhatsApp delivery mechanism (Twilio WhatsApp API vs. direct)
-- [ ] Pricing finalization (confirm with user research)
-- [ ] Language support in MVP (English only? or Hindi too?)
-- [ ] Regulatory considerations (DPDP Act compliance, health data privacy in India)
-- [ ] Payment gateway (Razorpay for INR + Stripe for USD)
+### Key Decisions Made (2026-03-18 update)
+| Decision | Choice | Rationale |
+|---|---|---|
+| App type | Next.js PWA (not native) | Ship fast, no app store, works on any mobile browser |
+| Elder login | Phone OTP via Supabase + Twilio | Simplest possible login for elderly |
+| NRI login | Email/password | Standard web login |
+| BLE devices | **Not in MVP** | Too complex for elderly; use photo OCR instead |
+| Health data entry | Photo of device → Claude Vision OCR | Elder takes photo of any device, AI extracts reading |
+| Languages | English only in MVP | Add Hindi/vernacular post-launch |
+| Notifications | SMS (Twilio) + Email (Resend) | No WhatsApp API approval delays |
+| WhatsApp (future) | Automate web.whatsapp.com via Puppeteer on personal number | Phase 2, no API needed |
+| Payments | **Razorpay** (India-first) | Phase 1, INR + UPI support |
 
 ---
 
@@ -538,4 +646,4 @@ What's done:
 ---
 
 *Last updated: 2026-03-18 | Updated by: Claude (setup-project-plan-ZBqsO)*
-*Next update: After monorepo initialization*
+*Next update: After Supabase + Vercel deployment*

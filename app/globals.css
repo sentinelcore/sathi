@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sathi-green: #10b981;
+}
+
+/* Elder-specific global styles */
+.elder-mode * {
+  -webkit-tap-highlight-color: rgba(16, 185, 129, 0.2);
+}
+
+.elder-mode button {
+  min-height: 56px;
+}
+
+/* Prevent zoom on input focus on iOS */
+input[type="text"],
+input[type="number"],
+input[type="tel"],
+input[type="email"] {
+  font-size: 16px;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: background-color, border-color, opacity;
+  transition-duration: 150ms;
+}
